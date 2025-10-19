@@ -19,13 +19,13 @@ async function connectToMongo() {
         console.log('Connected to MongoDB');
     } catch (error) {
         console.error('MongoDB connection failed:', error);
-        throw error; // Let Vercel log the error
+        throw error;
     }
 }
 
 connectToMongo().catch(err => {
     console.error('MongoDB connection failed:', err);
-    process.exit(1); // Exit only for local development
+    process.exit(1);
 });
 
 // Health check endpoint
