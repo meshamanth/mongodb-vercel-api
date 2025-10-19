@@ -1,10 +1,13 @@
 const express = require('express');
 const { MongoClient, ObjectId } = require('mongodb');
 const cors = require('cors');
+const bcrypt = require('bcrypt');
+const jwt = require('jsonwebtoken');
 require('dotenv').config();
 
 const app = express();
 const uri = process.env.MONGODB_URI;
+const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key'; // Use env var in production
 
 app.use(cors());
 app.use(express.json());
@@ -31,14 +34,85 @@ async function getDb() {
 // Health check endpoint
 app.get('/health', async (req, res) => {
     try {
-        await getDb(); // Ensure connected
+        await getDb();
         res.status(200).json({ status: 'Server is running', mongodbConnected: true });
     } catch (error) {
         res.status(500).json({ status: 'Server running', mongodbConnected: false, error: error.message });
     }
 });
 
-// GET all items
+// Signup endpoint
+app.post('/signup', async (req, res) => {
+    try {
+        const db = await getDb();
+        const { email, name, password } = req.body;
+
+        // Validate input
+        if (!email || !name || !password) {
+            return res.status(400).json({ error: 'Email, name, and password are required' });
+        }
+
+        // Check if email already exists
+        const existingUser = await db.collection('users').findOne({ email });
+        if (existingUser) {
+            return res.status(400).json({ error: 'Email already registered' });
+        }
+
+        // Hash password
+        const hashedPassword = await bcrypt.hash(password, 10);
+
+        // Insert user
+        const result = await db.collection('users').insertOne({
+            email,
+            name,
+            password: hashedPassword,
+            createdAt: new Date()
+        });
+
+        // Generate JWT
+        const token = jwt.sign({ userId: result.insertedId, email }, jwtSecret, { expiresIn: '1h' });
+
+        res.status(201).json({ message: 'User created', userId: result.insertedId, token });
+    } catch (error) {
+        console.error('Error during signup:', error);
+        res.status(500).json({ error: 'Failed to signup', details: error.message });
+    }
+});
+
+// Login endpoint
+app.post('/login', async (req, res) => {
+    try {
+        const db = await getDb();
+        const { email, password } = req.body;
+
+        // Validate input
+        if (!email || !password) {
+            return res.status(400).json({ error: 'Email and password are required' });
+        }
+
+        // Find user
+        const user = await db.collection('users').findOne({ email });
+        if (!user) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        // Verify password
+        const isValidPassword = await bcrypt.compare(password, user.password);
+        if (!isValidPassword) {
+            return res.status(401).json({ error: 'Invalid email or password' });
+        }
+
+        // Generate JWT
+        const token = jwt.sign({ userId: user._id, email: user.email }, jwtSecret, { expiresIn: '1h' });
+
+        res.status(200).json({ message: 'Login successful', token, user: { id: user._id, email: user.email, name: user.name } });
+    } catch (error) {
+        console.error('Error during login:', error);
+        res.status(500).json({ error: 'Failed to login', details: error.message });
+    }
+});
+
+// Existing endpoints (items)
 app.get('/api/items', async (req, res) => {
     try {
         const db = await getDb();
@@ -50,7 +124,6 @@ app.get('/api/items', async (req, res) => {
     }
 });
 
-// GET single item by ID
 app.get('/api/items/:id', async (req, res) => {
     try {
         const db = await getDb();
@@ -63,7 +136,6 @@ app.get('/api/items/:id', async (req, res) => {
     }
 });
 
-// POST new item
 app.post('/api/items', async (req, res) => {
     try {
         const db = await getDb();
@@ -77,7 +149,6 @@ app.post('/api/items', async (req, res) => {
     }
 });
 
-// PUT update item
 app.put('/api/items/:id', async (req, res) => {
     try {
         const db = await getDb();
@@ -94,7 +165,6 @@ app.put('/api/items/:id', async (req, res) => {
     }
 });
 
-// DELETE item
 app.delete('/api/items/:id', async (req, res) => {
     try {
         const db = await getDb();
@@ -107,7 +177,6 @@ app.delete('/api/items/:id', async (req, res) => {
     }
 });
 
-// Graceful close on Vercel (optional)
 process.on('SIGTERM', async () => {
     if (client) {
         await client.close();
@@ -116,5 +185,4 @@ process.on('SIGTERM', async () => {
     process.exit(0);
 });
 
-// Export for Vercel (no local server needed)
 module.exports = app;
