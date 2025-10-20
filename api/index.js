@@ -24,21 +24,26 @@ if (!process.env.JWT_SECRET) {
 }
 
 // Middleware
-const corsOptions = {
-    origin: [
-        'http://localhost:5173',  // For local development
-        'https://your-app.netlify.app'  // Your Netlify frontend URL (replace with actual)
-    ],
-    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // Allow POST for login
-    allowedHeaders: ['Content-Type', 'Authorization'],  // Allow auth headers
-    credentials: true,  // If you're sending cookies or auth tokens
-};
+const allowedOrigins = [
+    'http://localhost:5173',
+    'https://trip-registry.netlify.app'
+];
 
-// Apply CORS
-app.use(cors(corsOptions));
+app.use((req, res, next) => {
+    const origin = req.headers.origin;
+    if (allowedOrigins.includes(origin)) {
+        res.setHeader('Access-Control-Allow-Origin', origin);
+    }
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
+    res.setHeader('Access-Control-Allow-Credentials', 'true');
 
-// Handle preflight OPTIONS requests explicitly (for POST requests like login)
-app.options('*', cors(corsOptions));
+    if (req.method === 'OPTIONS') {
+        return res.status(200).end();
+    }
+
+    next();
+});
 app.use(express.json());
 
 // Debug endpoint
