@@ -24,7 +24,21 @@ if (!process.env.JWT_SECRET) {
 }
 
 // Middleware
-app.use(cors({ origin: ['http://localhost:5173', 'https://trip-registry.netlify.app/'] }));
+const corsOptions = {
+    origin: [
+        'http://localhost:5173',  // For local development
+        'https://your-app.netlify.app'  // Your Netlify frontend URL (replace with actual)
+    ],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],  // Allow POST for login
+    allowedHeaders: ['Content-Type', 'Authorization'],  // Allow auth headers
+    credentials: true,  // If you're sending cookies or auth tokens
+};
+
+// Apply CORS
+app.use(cors(corsOptions));
+
+// Handle preflight OPTIONS requests explicitly (for POST requests like login)
+app.options('*', cors(corsOptions));
 app.use(express.json());
 
 // Debug endpoint
