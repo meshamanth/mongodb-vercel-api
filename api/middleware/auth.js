@@ -4,6 +4,9 @@ require('dotenv').config();
 
 const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
+// Debug log to confirm module loading
+console.log('Loading auth.js, jwtSecret:', !!jwtSecret);
+
 function authenticateToken(req, res, next) {
     const token = req.headers.authorization?.replace('Bearer ', '');
     if (!token) {

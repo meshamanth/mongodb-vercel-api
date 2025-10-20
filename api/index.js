@@ -8,6 +8,9 @@ const expenseRoutes = require('./routes/expenses');
 const { getDb, closeDb } = require('./db');
 require('dotenv').config();
 
+// Debug log to confirm module imports
+console.log('Loading index.js, userRoutes:', typeof userRoutes);
+
 const app = express();
 
 // Validate environment variables
@@ -21,7 +24,7 @@ if (!process.env.JWT_SECRET) {
 }
 
 // Middleware
-app.use(cors({ origin: ['http://localhost:5173', 'https://mongodb-vercel-frontend.vercel.app'] }));
+app.use(cors({ origin: ['http://localhost:5173', 'https://trip-registry.netlify.app/'] }));
 app.use(express.json());
 
 // Debug endpoint
@@ -50,6 +53,12 @@ app.use('/', userRoutes);
 app.use('/', itemRoutes);
 app.use('/', tripRoutes);
 app.use('/', expenseRoutes);
+
+// Fallback for unmatched routes
+app.use((req, res) => {
+    console.error(`Route not found: ${req.method} ${req.url}`);
+    res.status(404).json({ error: 'Route not found' });
+});
 
 // Handle graceful shutdown
 process.on('SIGTERM', async () => {

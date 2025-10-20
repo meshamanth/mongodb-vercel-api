@@ -4,12 +4,15 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../db');
-const authenticateToken = require('../middleware/auth'); // Ensure correct path
+const authenticateToken = require('../middleware/auth'); // Verify path
 
 require('dotenv').config();
 
 const router = express.Router();
 const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key';
+
+// Debug log to confirm module loading
+console.log('Loading users.js, authenticateToken:', typeof authenticateToken);
 
 router.post('/signup', async (req, res) => {
     try {
