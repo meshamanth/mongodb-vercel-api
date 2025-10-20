@@ -24,6 +24,10 @@
       "dest": "api/index.js"
     },
     {
+      "src": "/api/users",
+      "dest": "api/index.js"
+    },
+    {
       "src": "/api/trips/(.*)",
       "dest": "api/index.js"
     },

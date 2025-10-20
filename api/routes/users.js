@@ -4,14 +4,13 @@ const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../db');
-const authenticateToken = require('../middleware/auth'); // Verify path
+const authenticateToken = require('../middleware/auth');
 
 require('dotenv').config();
 
 const router = express.Router();
 const jwtSecret = process.env.JWT_SECRET || 'your_jwt_secret_key';
 
-// Debug log to confirm module loading
 console.log('Loading users.js, authenticateToken:', typeof authenticateToken);
 
 router.post('/signup', async (req, res) => {
@@ -89,6 +88,26 @@ router.get('/api/users/me', authenticateToken, async (req, res) => {
     } catch (error) {
         console.error('Error fetching current user:', error.message, error);
         res.status(500).json({ error: 'Failed to fetch user', details: error.message });
+    }
+});
+
+router.get('/api/users', authenticateToken, async (req, res) => {
+    try {
+        const db = await getDb();
+        const users = await db.collection('users').find(
+            {},
+            { projection: { _id: 1, email: 1, name: 1 } }
+        ).toArray();
+        res.status(200).json({
+            users: users.map((user) => ({
+                id: user._id.toString(),
+                email: user.email,
+                name: user.name,
+            })),
+        });
+    } catch (error) {
+        console.error('Error fetching users:', error.message, error);
+        res.status(500).json({ error: 'Failed to fetch users', details: error.message });
     }
 });
 
