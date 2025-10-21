@@ -32,7 +32,7 @@ router.post('/signup', async (req, res) => {
             createdAt: new Date(),
         });
         const user = { id: result.insertedId.toString(), email, name };
-        const token = jwt.sign({ userId: result.insertedId.toString(), email }, jwtSecret, { expiresIn: '1h' });
+        const token = jwt.sign({ userId: result.insertedId.toString(), email }, jwtSecret, { expiresIn: '7d' });
         res.status(201).json({ message: 'User created', user, token });
     } catch (error) {
         console.error('Error during signup:', error.message, error);
@@ -55,7 +55,7 @@ router.post('/login', async (req, res) => {
         if (!isValidPassword) {
             return res.status(401).json({ error: 'Invalid email or password' });
         }
-        const token = jwt.sign({ userId: user._id.toString(), email: user.email }, jwtSecret, { expiresIn: '1h' });
+        const token = jwt.sign({ userId: user._id.toString(), email: user.email }, jwtSecret, { expiresIn: '7d' });
         res.status(200).json({
             message: 'Login successful',
             token,
