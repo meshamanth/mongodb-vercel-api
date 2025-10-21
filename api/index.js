@@ -26,7 +26,8 @@ if (!process.env.JWT_SECRET) {
 // Middleware
 const allowedOrigins = [
     'http://localhost:5173',
-    'https://trip-registry.netlify.app'
+    'https://trip-registry.netlify.app',
+    'https://trip.shamanth.in'
 ];
 
 app.use((req, res, next) => {
