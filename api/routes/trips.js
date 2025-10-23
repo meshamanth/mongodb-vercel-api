@@ -10,18 +10,17 @@ router.get('/api/trips/get', authenticateToken, async (req, res) => {
         const db = await getDb();
         const trips = await db.collection('trips').find({
             $or: [
-                { userId: new ObjectId(req.user.userId) }, // Trips created by user
-                { participants: req.user.userId } // Trips where user is a participant
+                { userId: new ObjectId(req.user.userId) },
+                { participants: req.user.userId }
             ]
         }).toArray();
-        console.log('Fetching trips for user:', req.user.userId, 'Found:', trips.length); // Debug
+        console.log('Fetched trips for user:', req.user.userId, 'Found:', trips.length);
         res.status(200).json({
             trips: trips.map(trip => ({
                 id: trip._id.toString(),
                 name: trip.name,
-                description: trip.description || '',
-                createdBy: trip.userId.toString(),
-                participants: trip.participants || [], // Ensure participants is always an array
+                description: trip.description,
+                participants: [...new Set(trip.participants)], // Ensure unique participants
                 createdAt: trip.createdAt
             }))
         });
@@ -35,15 +34,18 @@ router.post('/api/trips/create', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
         const { name, description, participants } = req.body;
+        if (!name) {
+            return res.status(400).json({ error: 'Name is required' });
+        }
+        const uniqueParticipants = [...new Set(participants || [])]; // Remove duplicates
         const trip = {
             name,
-            description: description || '',
+            description,
+            participants: uniqueParticipants,
             userId: new ObjectId(req.user.userId),
-            createdBy: req.user.userId, // Store as string for consistency
-            participants: [req.user.userId, ...(participants || [])], // Include creator in participants
             createdAt: new Date()
         };
-        console.log('Creating trip:', trip); // Debug
+        console.log('Creating trip:', trip);
         const result = await db.collection('trips').insertOne(trip);
         res.status(201).json({
             trip: {
@@ -61,14 +63,22 @@ router.post('/api/trips/update', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
         const { tripId, ...updates } = req.body;
+        const trip = await db.collection('trips').findOne({ _id: new ObjectId(tripId) });
+        if (!trip) {
+            console.log('Trip not found:', tripId);
+            return res.status(404).json({ error: 'Trip not found' });
+        }
+        if (trip.userId.toString() !== req.user.userId) {
+            console.log('User unauthorized to update trip:', tripId, 'user:', req.user.userId);
+            return res.status(403).json({ error: 'Unauthorized to update this trip' });
+        }
+        if (updates.participants) {
+            updates.participants = [...new Set(updates.participants)]; // Remove duplicates
+        }
         const result = await db.collection('trips').updateOne(
-            {
-                _id: new ObjectId(tripId),
-                userId: new ObjectId(req.user.userId)
-            },
+            { _id: new ObjectId(tripId) },
             { $set: { ...updates, updatedAt: new Date() } }
         );
-        if (result.matchedCount === 0) return res.status(404).json({ error: 'Trip not found' });
         res.status(200).json({ message: 'Trip updated' });
     } catch (error) {
         console.error('Error updating trip:', error);
@@ -80,11 +90,17 @@ router.post('/api/trips/delete', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
         const { tripId } = req.body;
-        const result = await db.collection('trips').deleteOne({
-            _id: new ObjectId(tripId),
-            userId: new ObjectId(req.user.userId),
-        });
-        if (result.deletedCount === 0) return res.status(404).json({ error: 'Trip not found' });
+        const trip = await db.collection('trips').findOne({ _id: new ObjectId(tripId) });
+        if (!trip) {
+            console.log('Trip not found:', tripId);
+            return res.status(404).json({ error: 'Trip not found' });
+        }
+        if (trip.userId.toString() !== req.user.userId) {
+            console.log('User unauthorized to delete trip:', tripId, 'user:', req.user.userId);
+            return res.status(403).json({ error: 'Unauthorized to delete this trip' });
+        }
+        await db.collection('trips').deleteOne({ _id: new ObjectId(tripId) });
+        await db.collection('expenses').deleteMany({ tripId });
         res.status(200).json({ message: 'Trip deleted' });
     } catch (error) {
         console.error('Error deleting trip:', error);
