@@ -101,4 +101,20 @@ router.post('/send-settlement-email', authenticateToken, validateEnv, async (req
     }
 });
 
+router.get('/test-email', async (req, res) => {
+    try {
+        const mailOptions = {
+            from: process.env.EMAIL_USER,
+            to: 'shamanth@itswronit.com',
+            subject: 'Test Email',
+            text: 'This is a test email from your Trip Registry app.',
+        };
+        await transporter.sendMail(mailOptions);
+        res.status(200).json({ message: 'Test email sent successfully' });
+    } catch (error) {
+        console.error('Test email error:', error.message);
+        res.status(500).json({ error: 'Failed to send test email', details: error.message });
+    }
+});
+
 module.exports = router;
