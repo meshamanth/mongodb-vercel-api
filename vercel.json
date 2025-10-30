@@ -17,7 +17,8 @@
     { "src": "/api/items/(.*)", "dest": "api/index.js" },
     { "src": "/api/settlements/remind", "dest": "api/index.js" },
     { "src": "/api/settlements/settle", "dest": "api/index.js" },
-    { "src": "/api/settlements/(.*)", "dest": "api/index.js" },
+    { "src": "/api/expenses/remind", "dest": "api/index.js" },
+    { "src": "/api/expenses/settle", "dest": "api/index.js" },
     { "src": "/(.*)", "status": 404, "dest": "api/index.js" }
   ]
 }
