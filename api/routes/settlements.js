@@ -28,7 +28,6 @@ router.post('/settlements/remind', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Verify user is authorized
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(tripId),
             $or: [
@@ -41,7 +40,6 @@ router.post('/settlements/remind', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized to send reminder for this trip' });
         }
 
-        // Fetch user details
         const usersCollection = db.collection('users');
         const fromUser = await usersCollection.findOne({ _id: new ObjectId(fromUserId) });
         const toUser = await usersCollection.findOne({ _id: new ObjectId(toUserId) });
@@ -50,7 +48,6 @@ router.post('/settlements/remind', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        // Send reminder email
         const mailOptions = {
             from: process.env.EMAIL_USER,
             to: fromUser.email,
@@ -67,7 +64,6 @@ router.post('/settlements/remind', authenticateToken, async (req, res) => {
 
         await transporter.sendMail(mailOptions);
 
-        // Log the reminder in the settlements collection
         const settlementsCollection = db.collection('settlements');
         const existingSettlement = await settlementsCollection.findOne({
             fromUserId,
@@ -111,7 +107,6 @@ router.post('/settlements/settle', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'Missing required fields' });
         }
 
-        // Verify user is authorized
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(tripId),
             $or: [
@@ -124,7 +119,6 @@ router.post('/settlements/settle', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized to settle payment for this trip' });
         }
 
-        // Update or create settlement record
         const settlementsCollection = db.collection('settlements');
         const existingSettlement = await settlementsCollection.findOne({
             fromUserId,
@@ -168,7 +162,6 @@ router.get('/settlements', authenticateToken, async (req, res) => {
             return res.status(400).json({ error: 'tripId is required' });
         }
 
-        // Verify user is authorized
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(tripId),
             $or: [

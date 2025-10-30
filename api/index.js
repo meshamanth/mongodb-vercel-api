@@ -5,12 +5,12 @@ const userRoutes = require('./routes/users');
 const itemRoutes = require('./routes/items');
 const tripRoutes = require('./routes/trips');
 const expenseRoutes = require('./routes/expenses');
-const settlementRoutes = require('./routes/settlements'); // Add this line
+const settlementRoutes = require('./routes/settlements');
 const { getDb, closeDb } = require('./db');
 require('dotenv').config();
 
-// Debug log to confirm module imports
 console.log('Loading index.js, userRoutes:', typeof userRoutes);
+console.log('Loading settlementRoutes:', typeof settlementRoutes); // Debug
 
 const app = express();
 
@@ -77,7 +77,7 @@ app.use('/', userRoutes);
 app.use('/', itemRoutes);
 app.use('/', tripRoutes);
 app.use('/', expenseRoutes);
-app.use('/', settlementRoutes); // Add this line
+app.use('/', settlementRoutes);
 
 // Fallback for unmatched routes
 app.use((req, res) => {
