@@ -13,12 +13,10 @@
     { "src": "/api/users/me", "dest": "api/index.js" },
     { "src": "/api/users", "dest": "api/index.js" },
     { "src": "/api/trips/(.*)", "dest": "api/index.js" },
-    { "src": "/api/expenses/(.*)", "dest": "api/index.js" },
-    { "src": "/api/items/(.*)", "dest": "api/index.js" },
-    { "src": "/api/settlements/remind", "dest": "api/index.js" },
-    { "src": "/api/settlements/settle", "dest": "api/index.js" },
     { "src": "/api/expenses/remind", "dest": "api/index.js" },
     { "src": "/api/expenses/settle", "dest": "api/index.js" },
+    { "src": "/api/expenses/(.*)", "dest": "api/index.js" },
+    { "src": "/api/items/(.*)", "dest": "api/index.js" },
     { "src": "/(.*)", "status": 404, "dest": "api/index.js" }
   ]
 }
