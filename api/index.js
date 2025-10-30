@@ -5,11 +5,13 @@ const userRoutes = require('./routes/users');
 const itemRoutes = require('./routes/items');
 const tripRoutes = require('./routes/trips');
 const expenseRoutes = require('./routes/expenses');
+const settlementRoutes = require('./routes/settlements'); // Add this
 const { getDb, closeDb } = require('./db');
 require('dotenv').config();
 
 // Debug log to confirm module imports
 console.log('Loading index.js, userRoutes:', typeof userRoutes);
+console.log('Loading index.js, settlementRoutes:', typeof settlementRoutes);
 
 const app = express();
 
@@ -22,12 +24,15 @@ if (!process.env.JWT_SECRET) {
     console.error('Error: JWT_SECRET is not defined');
     process.exit(1);
 }
+if (!process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.warn('Warning: EMAIL_USER or EMAIL_PASS not defined, email features may not work');
+}
 
 // Middleware
 const allowedOrigins = [
     'http://localhost:5173',
     'https://trip-registry.netlify.app',
-    'https://trip.shamanth.in'
+    'https://trip.shamanth.in',
 ];
 
 app.use((req, res, next) => {
@@ -54,6 +59,8 @@ app.get('/debug-env', (req, res) => {
         mongodbUriSet: !!uri,
         mongodbUriPreview: uri ? `${uri.substring(0, 20)}...` : 'undefined',
         jwtSecretSet: !!process.env.JWT_SECRET,
+        emailUserSet: !!process.env.EMAIL_USER,
+        emailPassSet: !!process.env.EMAIL_PASS,
     });
 });
 
@@ -64,7 +71,7 @@ app.get('/health', async (req, res) => {
         res.status(200).json({ status: 'Server is running', mongodbConnected: true });
     } catch (error) {
         console.error('Health check failed:', error.message);
-        res.status(500).json({ status: 'Server running', mongodbConnected: false, error: error.message });
+        res.status(500).json({ error: 'Server running', mongodbConnected: false, error: error.message });
     }
 });
 
@@ -73,6 +80,7 @@ app.use('/', userRoutes);
 app.use('/', itemRoutes);
 app.use('/', tripRoutes);
 app.use('/', expenseRoutes);
+app.use('/', settlementRoutes);
 
 // Fallback for unmatched routes
 app.use((req, res) => {
