@@ -5,6 +5,7 @@ const userRoutes = require('./routes/users');
 const itemRoutes = require('./routes/items');
 const tripRoutes = require('./routes/trips');
 const expenseRoutes = require('./routes/expenses');
+const settlementRoutes = require('./routes/settlements'); // Add this line
 const { getDb, closeDb } = require('./db');
 require('dotenv').config();
 
@@ -22,14 +23,17 @@ if (!process.env.JWT_SECRET) {
     console.error('Error: JWT_SECRET is not defined');
     process.exit(1);
 }
+if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
+    console.error('Error: Email configuration is incomplete');
+    process.exit(1);
+}
 
 // Middleware
 const allowedOrigins = [
     'http://localhost:5173',
     'https://trip-registry.netlify.app',
-    'https://trip.shamanth.in'
+    'https://trip.shamanth.in',
 ];
-
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (allowedOrigins.includes(origin)) {
@@ -38,13 +42,12 @@ app.use((req, res, next) => {
     res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-
     if (req.method === 'OPTIONS') {
         return res.status(200).end();
     }
-
     next();
 });
+
 app.use(express.json());
 
 // Debug endpoint
@@ -54,6 +57,7 @@ app.get('/debug-env', (req, res) => {
         mongodbUriSet: !!uri,
         mongodbUriPreview: uri ? `${uri.substring(0, 20)}...` : 'undefined',
         jwtSecretSet: !!process.env.JWT_SECRET,
+        emailConfigSet: !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS),
     });
 });
 
@@ -73,6 +77,7 @@ app.use('/', userRoutes);
 app.use('/', itemRoutes);
 app.use('/', tripRoutes);
 app.use('/', expenseRoutes);
+app.use('/', settlementRoutes); // Add this line
 
 // Fallback for unmatched routes
 app.use((req, res) => {
