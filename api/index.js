@@ -5,7 +5,7 @@ const userRoutes = require('./routes/users');
 const itemRoutes = require('./routes/items');
 const tripRoutes = require('./routes/trips');
 const expenseRoutes = require('./routes/expenses');
-const settlementRoutes = require('./routes/settlements'); // Add this
+const settlementRoutes = require('./routes/settlements');
 const { getDb, closeDb } = require('./db');
 require('dotenv').config();
 
@@ -81,6 +81,11 @@ app.use('/', itemRoutes);
 app.use('/', tripRoutes);
 app.use('/', expenseRoutes);
 app.use('/', settlementRoutes);
+
+// Test route for debugging
+app.get('/api/test-route', (req, res) => {
+    res.status(200).json({ message: 'Test route is working' });
+});
 
 // Fallback for unmatched routes
 app.use((req, res) => {
