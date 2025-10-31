@@ -5,7 +5,6 @@ const userRoutes = require('./routes/users');
 const itemRoutes = require('./routes/items');
 const tripRoutes = require('./routes/trips');
 const expenseRoutes = require('./routes/expenses');
-const settlementRoutes = require('./routes/settlements');
 const { getDb, closeDb } = require('./db');
 require('dotenv').config();
 
@@ -77,7 +76,6 @@ app.use('/', userRoutes);
 app.use('/', itemRoutes);
 app.use('/', tripRoutes);
 app.use('/', expenseRoutes);
-app.use('/', settlementRoutes);
 
 // Fallback for unmatched routes
 app.use((req, res) => {
