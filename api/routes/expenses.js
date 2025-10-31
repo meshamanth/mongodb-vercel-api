@@ -1,7 +1,9 @@
+// api/routes/expenses.js
 const express = require('express');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../db');
 const authenticateToken = require('../middleware/auth');
+// nodemailer is still required because we keep the transporter for future use
 const nodemailer = require('nodemailer');
 
 const transporter = nodemailer.createTransport({
@@ -16,12 +18,15 @@ const transporter = nodemailer.createTransport({
 
 const router = express.Router();
 
+/* -------------------------------------------------------------
+   Existing routes (GET /api/expenses/get, POST /api/expenses/create,
+   update, delete) – unchanged
+   ------------------------------------------------------------- */
 router.get('/api/expenses/get', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
         const { tripId } = req.query;
         if (tripId) {
-            // Check if user is participant or creator of the trip
             const trip = await db.collection('trips').findOne({
                 _id: new ObjectId(tripId),
                 $or: [
@@ -30,11 +35,11 @@ router.get('/api/expenses/get', authenticateToken, async (req, res) => {
                 ]
             });
             if (!trip) {
-                console.log('User unauthorized for trip:', tripId, 'user:', req.user.userId); // Debug
+                console.log('User unauthorized for trip:', tripId, 'user:', req.user.userId);
                 return res.status(403).json({ error: 'Unauthorized to access expenses for this trip' });
             }
             const expenses = await db.collection('expenses').find({ tripId }).toArray();
-            console.log('Fetching expenses for trip:', tripId, 'Found:', expenses.length); // Debug
+            console.log('Fetching expenses for trip:', tripId, 'Found:', expenses.length);
             res.status(200).json({
                 expenses: expenses.map(expense => ({
                     id: expense._id.toString(),
@@ -47,7 +52,6 @@ router.get('/api/expenses/get', authenticateToken, async (req, res) => {
                 }))
             });
         } else {
-            // Get all trips the user is involved in
             const trips = await db.collection('trips').find({
                 $or: [
                     { userId: new ObjectId(req.user.userId) },
@@ -56,7 +60,7 @@ router.get('/api/expenses/get', authenticateToken, async (req, res) => {
             }).toArray();
             const tripIds = trips.map(trip => trip._id.toString());
             const expenses = await db.collection('expenses').find({ tripId: { $in: tripIds } }).toArray();
-            console.log('Fetching all expenses for user:', req.user.userId, 'Found:', expenses.length); // Debug
+            console.log('Fetching all expenses for user:', req.user.userId, 'Found:', expenses.length);
             res.status(200).json({
                 expenses: expenses.map(expense => ({
                     id: expense._id.toString(),
@@ -82,7 +86,6 @@ router.post('/api/expenses/create', authenticateToken, async (req, res) => {
         if (!tripId) {
             return res.status(400).json({ error: 'tripId is required' });
         }
-        // Check if user is participant or creator
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(tripId),
             $or: [
@@ -91,7 +94,7 @@ router.post('/api/expenses/create', authenticateToken, async (req, res) => {
             ]
         });
         if (!trip) {
-            console.log('User unauthorized to add expense for trip:', tripId, 'user:', req.user.userId); // Debug
+            console.log('User unauthorized to add expense for trip:', tripId, 'user:', req.user.userId);
             return res.status(403).json({ error: 'Unauthorized to add expense to this trip' });
         }
         const expense = {
@@ -100,10 +103,10 @@ router.post('/api/expenses/create', authenticateToken, async (req, res) => {
             amount: Number(amount),
             paidBy,
             participants: participants || [],
-            userId: new ObjectId(req.user.userId), // Store creator for reference
+            userId: new ObjectId(req.user.userId),
             createdAt: new Date()
         };
-        console.log('Creating expense:', expense); // Debug
+        console.log('Creating expense:', expense);
         const result = await db.collection('expenses').insertOne(expense);
         res.status(201).json({
             expense: {
@@ -123,10 +126,9 @@ router.post('/api/expenses/update', authenticateToken, async (req, res) => {
         const { expenseId, ...updates } = req.body;
         const expense = await db.collection('expenses').findOne({ _id: new ObjectId(expenseId) });
         if (!expense) {
-            console.log('Expense not found:', expenseId); // Debug
+            console.log('Expense not found:', expenseId);
             return res.status(404).json({ error: 'Expense not found' });
         }
-        // Check if user is participant or creator of the trip
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(expense.tripId),
             $or: [
@@ -135,7 +137,7 @@ router.post('/api/expenses/update', authenticateToken, async (req, res) => {
             ]
         });
         if (!trip) {
-            console.log('User unauthorized to update expense for trip:', expense.tripId, 'user:', req.user.userId); // Debug
+            console.log('User unauthorized to update expense for trip:', expense.tripId, 'user:', req.user.userId);
             return res.status(403).json({ error: 'Unauthorized to update this expense' });
         }
         const result = await db.collection('expenses').updateOne(
@@ -155,10 +157,9 @@ router.post('/api/expenses/delete', authenticateToken, async (req, res) => {
         const { expenseId } = req.body;
         const expense = await db.collection('expenses').findOne({ _id: new ObjectId(expenseId) });
         if (!expense) {
-            console.log('Expense not found:', expenseId); // Debug
+            console.log('Expense not found:', expenseId);
             return res.status(404).json({ error: 'Expense not found' });
         }
-        // Check if user is participant or creator of the trip
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(expense.tripId),
             $or: [
@@ -167,12 +168,10 @@ router.post('/api/expenses/delete', authenticateToken, async (req, res) => {
             ]
         });
         if (!trip) {
-            console.log('User unauthorized to delete expense for trip:', expense.tripId, 'user:', req.user.userId); // Debug
+            console.log('User unauthorized to delete expense for trip:', expense.tripId, 'user:', req.user.userId);
             return res.status(403).json({ error: 'Unauthorized to delete this expense' });
         }
-        const result = await db.collection('expenses').deleteOne({
-            _id: new ObjectId(expenseId),
-        });
+        await db.collection('expenses').deleteOne({ _id: new ObjectId(expenseId) });
         res.status(200).json({ message: 'Expense deleted' });
     } catch (error) {
         console.error('Error deleting expense:', error);
@@ -180,6 +179,9 @@ router.post('/api/expenses/delete', authenticateToken, async (req, res) => {
     }
 });
 
+/* -------------------------------------------------------------
+   REMIND – ONLY LOG THE EMAIL (no real send)
+   ------------------------------------------------------------- */
 router.post('/expenses/remind', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
@@ -203,7 +205,7 @@ router.post('/expenses/remind', authenticateToken, async (req, res) => {
 
         const usersCollection = db.collection('users');
         const fromUser = await usersCollection.findOne({ _id: new ObjectId(fromUserId) });
-        const toUser = await usersCollection.findOne({ _id: new ObjectId(toUserId) });
+        const toUser   = await usersCollection.findOne({ _id: new ObjectId(toUserId) });
 
         if (!fromUser || !toUser) {
             return res.status(404).json({ error: 'User not found' });
@@ -216,22 +218,31 @@ router.post('/expenses/remind', authenticateToken, async (req, res) => {
             html: `
                 <h3>Payment Reminder</h3>
                 <p>Dear ${fromUser.name},</p>
-                <p>You owe ₹${amount.toFixed(2)} to ${toUser.name} for the trip "${trip.name}".</p>
+                <p>You owe ₹${Number(amount).toFixed(2)} to ${toUser.name} for the trip "${trip.name}".</p>
                 <p>Please settle the payment at your earliest convenience.</p>
                 <p><a href="${process.env.FRONTEND_URL}/trips/${tripId}">View Trip Details</a></p>
                 <p>Thank you!</p>
             `,
         };
 
-        await transporter.sendMail(mailOptions);
+        // LOG ONLY – no real email is sent
+        console.log('EMAIL LOG (remind):');
+        console.log('To:      ', mailOptions.to);
+        console.log('Subject: ', mailOptions.subject);
+        console.log('HTML:    ', mailOptions.html);
+        console.log('--- END EMAIL LOG ---');
 
-        res.status(200).json({ message: 'Reminder sent successfully' });
+        // Respond as if the email was sent
+        res.status(200).json({ message: 'Reminder logged (email not sent)' });
     } catch (error) {
-        console.error('Error sending reminder:', error);
-        res.status(500).json({ error: 'Failed to send reminder', details: error.message });
+        console.error('Error in remind endpoint:', error);
+        res.status(500).json({ error: 'Failed to log reminder', details: error.message });
     }
 });
 
+/* -------------------------------------------------------------
+   SETTLE – unchanged (no email involved)
+   ------------------------------------------------------------- */
 router.post('/expenses/settle', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
@@ -253,7 +264,7 @@ router.post('/expenses/settle', authenticateToken, async (req, res) => {
             return res.status(403).json({ error: 'Unauthorized to settle payment for this trip' });
         }
 
-        await db.collection('expenses').updateMany(
+        const updateResult = await db.collection('expenses').updateMany(
             {
                 tripId,
                 paidBy: toUserId,
@@ -262,6 +273,8 @@ router.post('/expenses/settle', authenticateToken, async (req, res) => {
             },
             { $set: { settled: true, settledAt: new Date() } }
         );
+
+        console.log('Expenses settled:', updateResult.modifiedCount);
 
         res.status(200).json({ message: 'Payment settled successfully' });
     } catch (error) {
