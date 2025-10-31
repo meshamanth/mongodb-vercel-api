@@ -3,25 +3,9 @@ const express = require('express');
 const { ObjectId } = require('mongodb');
 const { getDb } = require('../db');
 const authenticateToken = require('../middleware/auth');
-// nodemailer is still required because we keep the transporter for future use
-const nodemailer = require('nodemailer');
-
-const transporter = nodemailer.createTransport({
-    host: process.env.EMAIL_HOST,
-    port: process.env.EMAIL_PORT,
-    secure: process.env.EMAIL_PORT === '465',
-    auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASS,
-    },
-});
 
 const router = express.Router();
 
-/* -------------------------------------------------------------
-   Existing routes (GET /api/expenses/get, POST /api/expenses/create,
-   update, delete) – unchanged
-   ------------------------------------------------------------- */
 router.get('/api/expenses/get', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
@@ -179,9 +163,6 @@ router.post('/api/expenses/delete', authenticateToken, async (req, res) => {
     }
 });
 
-/* -------------------------------------------------------------
-   REMIND – ONLY LOG THE EMAIL (no real send)
-   ------------------------------------------------------------- */
 router.post('/expenses/remind', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
@@ -211,27 +192,6 @@ router.post('/expenses/remind', authenticateToken, async (req, res) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const mailOptions = {
-            from: process.env.EMAIL_USER,
-            to: fromUser.email,
-            subject: `Payment Reminder for ${trip.name}`,
-            html: `
-                <h3>Payment Reminder</h3>
-                <p>Dear ${fromUser.name},</p>
-                <p>You owe ₹${Number(amount).toFixed(2)} to ${toUser.name} for the trip "${trip.name}".</p>
-                <p>Please settle the payment at your earliest convenience.</p>
-                <p><a href="${process.env.FRONTEND_URL}/trips/${tripId}">View Trip Details</a></p>
-                <p>Thank you!</p>
-            `,
-        };
-
-        // LOG ONLY – no real email is sent
-        console.log('EMAIL LOG (remind):');
-        console.log('To:      ', mailOptions.to);
-        console.log('Subject: ', mailOptions.subject);
-        console.log('HTML:    ', mailOptions.html);
-        console.log('--- END EMAIL LOG ---');
-
         // Respond as if the email was sent
         res.status(200).json({ message: 'Reminder logged (email not sent)' });
     } catch (error) {
@@ -240,9 +200,6 @@ router.post('/expenses/remind', authenticateToken, async (req, res) => {
     }
 });
 
-/* -------------------------------------------------------------
-   SETTLE – unchanged (no email involved)
-   ------------------------------------------------------------- */
 router.post('/expenses/settle', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
@@ -273,8 +230,6 @@ router.post('/expenses/settle', authenticateToken, async (req, res) => {
             },
             { $set: { settled: true, settledAt: new Date() } }
         );
-
-        console.log('Expenses settled:', updateResult.modifiedCount);
 
         res.status(200).json({ message: 'Payment settled successfully' });
     } catch (error) {
