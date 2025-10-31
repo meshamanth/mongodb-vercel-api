@@ -6,236 +6,203 @@ const authenticateToken = require('../middleware/auth');
 
 const router = express.Router();
 
-router.get('/api/expenses/get', authenticateToken, async (req, res) => {
+/* -------------------------------------------------------------
+   GET /api/expenses?tripId=xxx
+   → returns all expenses for a trip (or all user trips if no tripId)
+   ------------------------------------------------------------- */
+router.get('/api/expenses', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
         const { tripId } = req.query;
+
         if (tripId) {
+            // ---- Single trip ----
             const trip = await db.collection('trips').findOne({
                 _id: new ObjectId(tripId),
                 $or: [
                     { userId: new ObjectId(req.user.userId) },
-                    { participants: req.user.userId }
-                ]
+                    { participants: req.user.userId },
+                ],
             });
+
             if (!trip) {
-                console.log('User unauthorized for trip:', tripId, 'user:', req.user.userId);
-                return res.status(403).json({ error: 'Unauthorized to access expenses for this trip' });
+                return res.status(403).json({ error: 'Unauthorized' });
             }
-            const expenses = await db.collection('expenses').find({ tripId }).toArray();
-            console.log('Fetching expenses for trip:', tripId, 'Found:', expenses.length);
-            res.status(200).json({
-                expenses: expenses.map(expense => ({
-                    id: expense._id.toString(),
-                    tripId: expense.tripId,
-                    description: expense.description,
-                    amount: expense.amount,
-                    paidBy: expense.paidBy,
-                    participants: expense.participants || [],
-                    createdAt: expense.createdAt
-                }))
-            });
-        } else {
-            const trips = await db.collection('trips').find({
-                $or: [
-                    { userId: new ObjectId(req.user.userId) },
-                    { participants: req.user.userId }
-                ]
-            }).toArray();
-            const tripIds = trips.map(trip => trip._id.toString());
-            const expenses = await db.collection('expenses').find({ tripId: { $in: tripIds } }).toArray();
-            console.log('Fetching all expenses for user:', req.user.userId, 'Found:', expenses.length);
-            res.status(200).json({
-                expenses: expenses.map(expense => ({
-                    id: expense._id.toString(),
-                    tripId: expense.tripId,
-                    description: expense.description,
-                    amount: expense.amount,
-                    paidBy: expense.paidBy,
-                    participants: expense.participants || [],
-                    createdAt: expense.createdAt
-                }))
+
+            const expenses = await db
+                .collection('expenses')
+                .find({ tripId: tripId.toString() })
+                .toArray();
+
+            return res.status(200).json({
+                expenses: expenses.map(mapExpense),
             });
         }
-    } catch (error) {
-        console.error('Error fetching expenses:', error);
-        res.status(500).json({ error: 'Failed to fetch expenses', details: error.message });
+
+        // ---- All user trips ----
+        const trips = await db.collection('trips').find({
+            $or: [
+                { userId: new ObjectId(req.user.userId) },
+                { participants: req.user.userId },
+            ],
+        }).toArray();
+
+        const tripIds = trips.map(t => t._id.toString());
+        const expenses = await db
+            .collection('expenses')
+            .find({ tripId: { $in: tripIds } })
+            .toArray();
+
+        res.status(200).json({
+            expenses: expenses.map(mapExpense),
+        });
+    } catch (err) {
+        console.error('GET /api/expenses error:', err);
+        res.status(500).json({ error: 'Server error' });
     }
 });
 
-router.post('/api/expenses/create', authenticateToken, async (req, res) => {
+/* -------------------------------------------------------------
+   POST /api/expenses
+   → create expense (including settlement expenses)
+   ------------------------------------------------------------- */
+router.post('/api/expenses', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
-        const { tripId, description, amount, paidBy, participants } = req.body;
-        if (!tripId) {
-            return res.status(400).json({ error: 'tripId is required' });
+        const {
+            tripId,
+            description,
+            amount,
+            paidBy,
+            participants = [],
+            splitType = 'equal', // 'equal' | 'unequal'
+            shares = {}, // only for unequal: { userId: amountOwed }
+        } = req.body;
+
+        if (!tripId || !description || amount == null || !paidBy) {
+            return res.status(400).json({ error: 'Missing required fields' });
         }
+
+        // Authorization
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(tripId),
             $or: [
                 { userId: new ObjectId(req.user.userId) },
-                { participants: req.user.userId }
-            ]
+                { participants: req.user.userId },
+            ],
         });
-        if (!trip) {
-            console.log('User unauthorized to add expense for trip:', tripId, 'user:', req.user.userId);
-            return res.status(403).json({ error: 'Unauthorized to add expense to this trip' });
+        if (!trip) return res.status(403).json({ error: 'Unauthorized' });
+
+        // Validate unequal split
+        if (splitType === 'unequal' && Object.keys(shares).length === 0) {
+            return res.status(400).json({ error: 'shares required for unequal split' });
         }
+
         const expense = {
             tripId,
             description,
             amount: Number(amount),
             paidBy,
-            participants: participants || [],
+            participants,
+            splitType,
+            shares: splitType === 'unequal' ? shares : {},
             userId: new ObjectId(req.user.userId),
-            createdAt: new Date()
+            createdAt: new Date(),
         };
-        console.log('Creating expense:', expense);
+
         const result = await db.collection('expenses').insertOne(expense);
+
         res.status(201).json({
             expense: {
                 id: result.insertedId.toString(),
-                ...expense
-            }
+                ...expense,
+            },
         });
-    } catch (error) {
-        console.error('Error creating expense:', error);
-        res.status(500).json({ error: 'Failed to create expense', details: error.message });
+    } catch (err) {
+        console.error('POST /api/expenses error:', err);
+        res.status(500).json({ error: 'Failed to create expense' });
     }
 });
 
-router.post('/api/expenses/update', authenticateToken, async (req, res) => {
+/* -------------------------------------------------------------
+   PATCH /api/expenses/:id
+   → update expense
+   ------------------------------------------------------------- */
+router.patch('/api/expenses/:id', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
-        const { expenseId, ...updates } = req.body;
-        const expense = await db.collection('expenses').findOne({ _id: new ObjectId(expenseId) });
-        if (!expense) {
-            console.log('Expense not found:', expenseId);
-            return res.status(404).json({ error: 'Expense not found' });
-        }
+        const { id } = req.params;
+        const updates = req.body;
+
+        const expense = await db.collection('expenses').findOne({ _id: new ObjectId(id) });
+        if (!expense) return res.status(404).json({ error: 'Expense not found' });
+
+        // Authorization
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(expense.tripId),
             $or: [
                 { userId: new ObjectId(req.user.userId) },
-                { participants: req.user.userId }
-            ]
+                { participants: req.user.userId },
+            ],
         });
-        if (!trip) {
-            console.log('User unauthorized to update expense for trip:', expense.tripId, 'user:', req.user.userId);
-            return res.status(403).json({ error: 'Unauthorized to update this expense' });
-        }
-        const result = await db.collection('expenses').updateOne(
-            { _id: new ObjectId(expenseId) },
+        if (!trip) return res.status(403).json({ error: 'Unauthorized' });
+
+        await db.collection('expenses').updateOne(
+            { _id: new ObjectId(id) },
             { $set: { ...updates, updatedAt: new Date() } }
         );
+
         res.status(200).json({ message: 'Expense updated' });
-    } catch (error) {
-        console.error('Error updating expense:', error);
-        res.status(500).json({ error: 'Failed to update expense', details: error.message });
+    } catch (err) {
+        console.error('PATCH /api/expenses error:', err);
+        res.status(500).json({ error: 'Failed to update' });
     }
 });
 
-router.post('/api/expenses/delete', authenticateToken, async (req, res) => {
+/* -------------------------------------------------------------
+   DELETE /api/expenses/:id
+   ------------------------------------------------------------- */
+router.delete('/api/expenses/:id', authenticateToken, async (req, res) => {
     try {
         const db = await getDb();
-        const { expenseId } = req.body;
-        const expense = await db.collection('expenses').findOne({ _id: new ObjectId(expenseId) });
-        if (!expense) {
-            console.log('Expense not found:', expenseId);
-            return res.status(404).json({ error: 'Expense not found' });
-        }
+        const { id } = req.params;
+
+        const expense = await db.collection('expenses').findOne({ _id: new ObjectId(id) });
+        if (!expense) return res.status(404).json({ error: 'Expense not found' });
+
+        // Authorization
         const trip = await db.collection('trips').findOne({
             _id: new ObjectId(expense.tripId),
             $or: [
                 { userId: new ObjectId(req.user.userId) },
-                { participants: req.user.userId }
-            ]
+                { participants: req.user.userId },
+            ],
         });
-        if (!trip) {
-            console.log('User unauthorized to delete expense for trip:', expense.tripId, 'user:', req.user.userId);
-            return res.status(403).json({ error: 'Unauthorized to delete this expense' });
-        }
-        await db.collection('expenses').deleteOne({ _id: new ObjectId(expenseId) });
+        if (!trip) return res.status(403).json({ error: 'Unauthorized' });
+
+        await db.collection('expenses').deleteOne({ _id: new ObjectId(id) });
         res.status(200).json({ message: 'Expense deleted' });
-    } catch (error) {
-        console.error('Error deleting expense:', error);
-        res.status(500).json({ error: 'Failed to delete expense', details: error.message });
+    } catch (err) {
+        console.error('DELETE /api/expenses error:', err);
+        res.status(500).json({ error: 'Failed to delete' });
     }
 });
 
-router.post('/expenses/remind', authenticateToken, async (req, res) => {
-    try {
-        const db = await getDb();
-        const { fromUserId, toUserId, amount, tripId } = req.body;
-
-        if (!fromUserId || !toUserId || !amount || !tripId) {
-            return res.status(400).json({ error: 'Missing required fields' });
-        }
-
-        const trip = await db.collection('trips').findOne({
-            _id: new ObjectId(tripId),
-            $or: [
-                { userId: new ObjectId(req.user.userId) },
-                { participants: req.user.userId },
-            ],
-        });
-
-        if (!trip) {
-            return res.status(403).json({ error: 'Unauthorized to send reminder for this trip' });
-        }
-
-        const usersCollection = db.collection('users');
-        const fromUser = await usersCollection.findOne({ _id: new ObjectId(fromUserId) });
-        const toUser   = await usersCollection.findOne({ _id: new ObjectId(toUserId) });
-
-        if (!fromUser || !toUser) {
-            return res.status(404).json({ error: 'User not found' });
-        }
-
-        // Respond as if the email was sent
-        res.status(200).json({ message: 'Reminder logged (email not sent)' });
-    } catch (error) {
-        console.error('Error in remind endpoint:', error);
-        res.status(500).json({ error: 'Failed to log reminder', details: error.message });
-    }
-});
-
-router.post('/expenses/settle', authenticateToken, async (req, res) => {
-    try {
-        const db = await getDb();
-        const { fromUserId, toUserId, amount, tripId } = req.body;
-
-        if (!fromUserId || !toUserId || !amount || !tripId) {
-            return res.status(400).json({ error: 'Missing required fields' });
-        }
-
-        const trip = await db.collection('trips').findOne({
-            _id: new ObjectId(tripId),
-            $or: [
-                { userId: new ObjectId(req.user.userId) },
-                { participants: req.user.userId },
-            ],
-        });
-
-        if (!trip) {
-            return res.status(403).json({ error: 'Unauthorized to settle payment for this trip' });
-        }
-
-        const updateResult = await db.collection('expenses').updateMany(
-            {
-                tripId,
-                paidBy: toUserId,
-                'participants.userId': fromUserId,
-                settled: { $ne: true },
-            },
-            { $set: { settled: true, settledAt: new Date() } }
-        );
-
-        res.status(200).json({ message: 'Payment settled successfully' });
-    } catch (error) {
-        console.error('Error settling payment:', error);
-        res.status(500).json({ error: 'Failed to settle payment', details: error.message });
-    }
-});
+/* -------------------------------------------------------------
+   Helper: map DB → API
+   ------------------------------------------------------------- */
+function mapExpense(expense) {
+    return {
+        id: expense._id.toString(),
+        tripId: expense.tripId,
+        description: expense.description,
+        amount: expense.amount,
+        paidBy: expense.paidBy,
+        participants: expense.participants || [],
+        splitType: expense.splitType || 'equal',
+        shares: expense.shares || {},
+        createdAt: expense.createdAt,
+    };
+}
 
 module.exports = router;

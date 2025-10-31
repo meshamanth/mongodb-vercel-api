@@ -4,86 +4,62 @@ const cors = require('cors');
 const userRoutes = require('./routes/users');
 const itemRoutes = require('./routes/items');
 const tripRoutes = require('./routes/trips');
-const expenseRoutes = require('./routes/expenses');
+const expenseRoutes = require('./routes/expenses'); // ← already correct
 const { getDb, closeDb } = require('./db');
-require('dotenv').config();
 
-console.log('Loading index.js, userRoutes:', typeof userRoutes);
-console.log('Loading settlementRoutes:', typeof settlementRoutes); // Debug
+async function ensureIndexes() {
+    try {
+        const db = await getDb();
+        await db.collection('expenses').createIndex({ tripId: 1 }, { background: true });
+        console.log('Ensured index on expenses.tripId');
+    } catch (err) {
+        if (!err.message.includes('duplicate')) {
+            console.error('Index creation failed:', err);
+        }
+    }
+}
+ensureIndexes();
+require('dotenv').config();
 
 const app = express();
 
-// Validate environment variables
-if (!process.env.MONGODB_URI) {
-    console.error('Error: MONGODB_URI is not defined');
-    process.exit(1);
-}
-if (!process.env.JWT_SECRET) {
-    console.error('Error: JWT_SECRET is not defined');
-    process.exit(1);
-}
-if (!process.env.EMAIL_HOST || !process.env.EMAIL_USER || !process.env.EMAIL_PASS) {
-    console.error('Error: Email configuration is incomplete');
-    process.exit(1);
-}
-
-// Middleware
+// CORS
 const allowedOrigins = [
     'http://localhost:5173',
     'https://trip-registry.netlify.app',
     'https://trip.shamanth.in',
 ];
+
 app.use((req, res, next) => {
     const origin = req.headers.origin;
     if (allowedOrigins.includes(origin)) {
         res.setHeader('Access-Control-Allow-Origin', origin);
     }
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PATCH, DELETE, OPTIONS');
     res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization');
     res.setHeader('Access-Control-Allow-Credentials', 'true');
-    if (req.method === 'OPTIONS') {
-        return res.status(200).end();
-    }
+    if (req.method === 'OPTIONS') return res.status(200).end();
     next();
 });
 
 app.use(express.json());
 
-// Debug endpoint
-app.get('/debug-env', (req, res) => {
-    const uri = process.env.MONGODB_URI;
-    res.status(200).json({
-        mongodbUriSet: !!uri,
-        mongodbUriPreview: uri ? `${uri.substring(0, 20)}...` : 'undefined',
-        jwtSecretSet: !!process.env.JWT_SECRET,
-        emailConfigSet: !!(process.env.EMAIL_HOST && process.env.EMAIL_USER && process.env.EMAIL_PASS),
-    });
-});
-
-// Health check endpoint
-app.get('/health', async (req, res) => {
-    try {
-        await getDb();
-        res.status(200).json({ status: 'Server is running', mongodbConnected: true });
-    } catch (error) {
-        console.error('Health check failed:', error.message);
-        res.status(500).json({ status: 'Server running', mongodbConnected: false, error: error.message });
-    }
-});
-
 // Routes
 app.use('/', userRoutes);
 app.use('/', itemRoutes);
 app.use('/', tripRoutes);
-app.use('/', expenseRoutes);
+app.use('/', expenseRoutes); // ← this mounts /api/expenses
 
-// Fallback for unmatched routes
-app.use((req, res) => {
-    console.error(`Route not found: ${req.method} ${req.url}`);
-    res.status(404).json({ error: 'Route not found' });
+// Health
+app.get('/health', async (req, res) => {
+    try {
+        await getDb();
+        res.json({ status: 'ok', mongodb: true });
+    } catch {
+        res.status(500).json({ status: 'error', mongodb: false });
+    }
 });
 
-// Handle graceful shutdown
 process.on('SIGTERM', async () => {
     await closeDb();
     process.exit(0);
